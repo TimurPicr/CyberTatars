@@ -4,7 +4,7 @@ import requests
 #import threading
 
 db = cache.cache
-services = {'https://cybertatars.free.beeceptor.com/master': 'master', 'https://cybertatars.free.beeceptor.com/visa': 'visa'}
+services = {'https://cybertatars2.free.beeceptor.com/master': 'master', 'https://cybertatars2.free.beeceptor.com/visa': 'visa'}
 def proxy_handler(client_socket, client_address):
     global db
     request = client_socket.recv(1024)
@@ -25,47 +25,24 @@ def proxy_handler(client_socket, client_address):
 
     if method == 'DELETE':
         cache.del_old(service)
+        client_socket.send(
+            f'HTTP/1.1 200 OK\nContent-Type: text/html\nConnection: close\n\nDeleted all {service} cache'.encode('utf-8'))
+        client_socket.close()
     else:
         content = cache.clean_content(cache.content_to_dict(content, content_type))
-        print(content)
         if cache.is_in_db(service, str(content)):
-            print('sending')
-            client_socket.send(b'HTTP/1.1 200 OK\nContent-Type: text/html\nConnection: close\n\n' + str(content).encode('utf-8'))
+            print('sending...')
+            client_socket.send(b'HTTP/1.1 200 OK\nContent-Type: text/html\nConnection: close\n\n' + cache.get_from_db(service, str(content)))
             client_socket.close()
         else:
             if method == 'PUT':
-                r = requests.put(url, data=content, headers={'Content-type': 'application/json'})
-                response_content_type = r.headers['Content-type']
-                body = cache.content_to_dict(r.text, response_content_type)
-                client_socket.send(
-                    f'HTTP/1.1 200 OK\nContent-Type: application/json\nConnection: close\n\n{body}'.encode('utf-8'))
-                cache.add_to_db(service, str(content), body)
+                r = requests.put(url, data=content)
             elif method == 'POST':
-                r = requests.post(url, data=content, headers={'Content-type': 'application/json'})
-                response_content_type = r.headers['Content-type']
-                body = cache.content_to_dict(r.text, response_content_type)
-                client_socket.send(
-                    f'HTTP/1.1 200 OK\nContent-Type: application/json\nConnection: close\n\n{body}'.encode(
-                        'utf-8'))
-                cache.add_to_db(service, str(content), body)
+                r = requests.post(url, data=content)
+
+            response_content_type = r.headers['Content-type']
+            body = cache.content_to_dict(r.text, response_content_type)
+            client_socket.send(
+                f'HTTP/1.1 200 OK\nContent-Type: application/json\nConnection: close\n\n{str(body)}'.encode('utf-8'))
+            cache.add_to_db(service, str(content), str(body))
             client_socket.close()
-
-
-
-    
-def proxy_server(address):
-    try:
-        print('Starting...')
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind(address)
-        server_socket.listen(1)
-        while True:
-            print('Waiting for client...')
-            client_socket, client_address = server_socket.accept()
-            proxy_handler(client_socket, client_address)
-    except KeyboardInterrupt:
-        print('Shutdown server')
-        server_socket.shutdown(0)
-
-
-proxy_server(('127.0.0.1', 5555))
